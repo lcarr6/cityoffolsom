@@ -1,0 +1,11 @@
+body{
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    background-color: white; 
+}
+h3, .post-subtitle{
+    color: grey !important;
+      font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif !important; 
+}
+a:hover{
+    color: orangered !important;
+}

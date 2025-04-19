@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeBron's Hoop Challenge</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #4a90e2, #004aad); /* Blue gradient background */
+            font-family: 'Bebas Neue', sans-serif; /* Sporty font */
+            color: #ffffff; /* White text */
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            text-align: center;
+        }
+
+        h1 {
+            color: #f5a623; /* Orange/Gold color */
+            text-shadow: 2px 2px #8b4513; /* Brown shadow */
+            margin-bottom: 10px;
+            font-size: 3.5em;
+            letter-spacing: 2px;
+        }
+
+        #gameStats {
+            display: flex;
+            justify-content: space-around;
+            width: 80%;
+            max-width: 500px;
+            margin-bottom: 15px;
+            font-size: 2em;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        #gameCanvas {
+            background-color: rgba(0, 0, 0, 0.2); /* Semi-transparent court */
+            border: 5px solid #ffffff; /* White border */
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5); /* White glow */
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair; /* Indicate clickable area */
+            max-width: 90%; /* Responsive canvas */
+            aspect-ratio: 4 / 3; /* Maintain aspect ratio */
+        }
+
+        #messageBox {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(139, 69, 19, 0.9); /* Brown wood color */
+            color: #f5a623; /* Orange/Gold text */
+            padding: 30px 50px;
+            border: 5px solid #ffffff; /* White border */
+            border-radius: 15px;
+            text-align: center;
+            font-size: 2.5em;
+            display: none; /* Hidden by default */
+            z-index: 10;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+        }
+
+        #messageBox p {
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+
+        #messageBox button, #startBtn {
+            font-family: 'Bebas Neue', sans-serif;
+            padding: 12px 30px;
+            font-size: 0.8em;
+            cursor: pointer;
+            border: 3px solid #f5a623; /* Orange border */
+            background: linear-gradient(to bottom, #ffffff, #dddddd); /* White gradient */
+            color: #8b4513; /* Brown text */
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            margin-top: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px rgba(0,0,0,0.3);
+        }
+         #messageBox button:active, #startBtn:active {
+            box-shadow: 0 1px rgba(0,0,0,0.3);
+            transform: translateY(3px);
+         }
+
+        #startBtn {
+             font-size: 1.5em;
+             margin-top: 20px;
+             display: block; /* Make it block to center it */
+             margin-left: auto;
+             margin-right: auto;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>LeBron's Hoop Challenge</h1>
+
+    <div id="gameStats">
+        <div id="scoreDisplay">SCORE: 0</div>
+        <div id="timeDisplay">TIME: 60</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <button id="startBtn">Start Game</button>
+
+    <div id="messageBox">
+        <p id="messageText"></p>
+        <button id="restartBtn">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const restartBtn = document.getElementById('restartBtn');
+        const startBtn = document.getElementById('startBtn');
+
+        // --- Game Settings ---
+        const GAME_DURATION = 60; // seconds
+        const HOOP_SPAWN_INTERVAL = 1200; // milliseconds
+        const REGULAR_HOOP_LIFESPAN = 2500; // milliseconds
+        const RED_HOOP_LIFESPAN = 1500; // milliseconds
+        const REGULAR_HOOP_POINTS = 2;
+        const RED_HOOP_POINTS = 3;
+        const RED_HOOP_CHANCE = 0.25; // 25% chance for a red hoop
+        const HOOP_WIDTH = 60;
+        const HOOP_HEIGHT = 80; // Includes backboard
+        const RIM_RADIUS = 20;
+        const BACKBOARD_HEIGHT = 40;
+        const LAKERS_PURPLE = '#552583';
+        const LAKERS_GOLD = '#FDB927';
+        const BASKETBALL_ORANGE = '#f5a623';
+        // *** NEW: Define a skin tone color ***
+        const SKIN_TONE = '#634832'; // Darker skin tone
+
+        // --- LeBron Figure Settings ---
+        const LEBRON_FIGURE_HEIGHT = 60;
+        const LEBRON_FIGURE_WIDTH = 30;
+        let lebronX, lebronY; // Position will be set based on canvas size
+        let lebronHandX, lebronHandY; // Position where ball animation starts
+
+        // --- Game State ---
+        let score;
+        let timeLeft;
+        let gameActive;
+        let hoops; // Array to store active hoops
+        let gameTimerInterval;
+        let hoopSpawnInterval;
+        let canvasWidth, canvasHeight;
+        let animationFrameId;
+
+        // --- Hoop Object Structure ---
+        // { x, y, type ('regular' or 'red'), createdAt, lifespan, clicked, animation }
+        // animation: { active, ballX, ballY, startX, startY, targetX, targetY, startTime, duration }
+
+        // --- Utility Functions ---
+        function resizeCanvas() {
+            const containerWidth = window.innerWidth * 0.9;
+            const containerHeight = window.innerHeight * 0.7; // Adjust as needed
+            const aspectRatio = 4 / 3;
+
+            if (containerWidth / containerHeight > aspectRatio) {
+                canvasHeight = Math.min(containerHeight, 500); // Limit max height
+                canvasWidth = canvasHeight * aspectRatio;
+            } else {
+                canvasWidth = Math.min(containerWidth, 600); // Limit max width
+                canvasHeight = canvasWidth / aspectRatio;
+            }
+
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+
+            // Update LeBron's position based on new canvas size
+            updateLeBronPosition();
+        }
+
+        function updateLeBronPosition() {
+             lebronX = canvasWidth * 0.15; // Position him towards the left
+             lebronY = canvasHeight - LEBRON_FIGURE_HEIGHT - 10; // Place near bottom
+             // Calculate hand position relative to LeBron's body (for shooting pose)
+             lebronHandX = lebronX + LEBRON_FIGURE_WIDTH * 0.8;
+             lebronHandY = lebronY + LEBRON_FIGURE_HEIGHT * 0.3;
+        }
+
+
+        function getRandomPosition() {
+            const padding = 20; // Prevent spawning too close to edges
+            // Ensure hoops don't spawn too low, potentially behind LeBron
+            const minY = padding;
+            const maxY = canvasHeight - HOOP_HEIGHT - padding * 2 - LEBRON_FIGURE_HEIGHT; // Adjust max Y
+            const x = Math.random() * (canvasWidth - HOOP_WIDTH - padding * 2) + padding;
+            const y = Math.random() * (maxY - minY) + minY;
+            return { x, y };
+        }
+
+        // --- Drawing Functions ---
+
+        // ** UPDATED **: Draws the simple LeBron figure with new skin tone and jersey number
+        function drawLeBron() {
+            if (!gameActive) return; // Don't draw if game isn't running
+
+            // Simple stick figure representation
+            const headRadius = LEBRON_FIGURE_WIDTH * 0.2;
+            const bodyY = lebronY + headRadius * 2;
+            const bodyHeight = LEBRON_FIGURE_HEIGHT * 0.5;
+            const legY = bodyY + bodyHeight;
+
+            // Head
+            // *** MODIFIED: Use defined SKIN_TONE ***
+            ctx.fillStyle = SKIN_TONE;
+            ctx.beginPath();
+            ctx.arc(lebronX + LEBRON_FIGURE_WIDTH / 2, lebronY + headRadius, headRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Body (Jersey)
+            ctx.fillStyle = LAKERS_PURPLE;
+            ctx.fillRect(lebronX, bodyY, LEBRON_FIGURE_WIDTH, bodyHeight);
+
+            // *** NEW: Add Jersey Number ***
+            const jerseyCenterX = lebronX + LEBRON_FIGURE_WIDTH / 2;
+            const jerseyCenterY = bodyY + bodyHeight / 2;
+            ctx.fillStyle = LAKERS_GOLD; // Use Lakers Gold for number
+            ctx.font = 'bold 14px Bebas Neue'; // Adjust font size/style as needed
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('23', jerseyCenterX, jerseyCenterY);
+
+            // Shorts
+            ctx.fillStyle = LAKERS_GOLD;
+            ctx.fillRect(lebronX, legY, LEBRON_FIGURE_WIDTH, LEBRON_FIGURE_HEIGHT * 0.2);
+
+            // Arms (Shooting Pose)
+            // *** MODIFIED: Use defined SKIN_TONE ***
+            ctx.strokeStyle = SKIN_TONE;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            // Left arm (down)
+            ctx.moveTo(lebronX, bodyY + 5);
+            ctx.lineTo(lebronX - 10, bodyY + bodyHeight * 0.6);
+            // Right arm (shooting)
+            ctx.moveTo(lebronX + LEBRON_FIGURE_WIDTH, bodyY + 5);
+            ctx.lineTo(lebronHandX, lebronHandY); // Connects to calculated hand position
+            ctx.stroke();
+
+             // Legs
+            ctx.beginPath();
+            ctx.moveTo(lebronX + LEBRON_FIGURE_WIDTH / 2, legY + LEBRON_FIGURE_HEIGHT * 0.2);
+            ctx.lineTo(lebronX + LEBRON_FIGURE_WIDTH / 2 - 5, lebronY + LEBRON_FIGURE_HEIGHT); // Left leg
+            ctx.moveTo(lebronX + LEBRON_FIGURE_WIDTH / 2, legY + LEBRON_FIGURE_HEIGHT * 0.2);
+            ctx.lineTo(lebronX + LEBRON_FIGURE_WIDTH / 2 + 5, lebronY + LEBRON_FIGURE_HEIGHT); // Right leg
+            ctx.stroke();
+
+            ctx.lineWidth = 1; // Reset line width
+            ctx.textAlign = 'left'; // Reset text alignment
+            ctx.textBaseline = 'alphabetic'; // Reset text baseline
+        }
+
+
+        function drawHoop(hoop) {
+            const backboardX = hoop.x;
+            const backboardY = hoop.y;
+            const rimY = backboardY + BACKBOARD_HEIGHT;
+            const rimCenterX = hoop.x + HOOP_WIDTH / 2;
+
+            // Backboard
+            ctx.fillStyle = '#ffffff'; // White backboard
+            ctx.fillRect(backboardX, backboardY, HOOP_WIDTH, BACKBOARD_HEIGHT);
+            ctx.strokeStyle = '#000000';
+            ctx.strokeRect(backboardX, backboardY, HOOP_WIDTH, BACKBOARD_HEIGHT);
+            // Small square on backboard
+            ctx.fillStyle = '#ff0000'; // Red square
+            ctx.fillRect(rimCenterX - 10, backboardY + 10, 20, 15);
+
+
+            // Rim
+            ctx.beginPath();
+            ctx.arc(rimCenterX, rimY, RIM_RADIUS, 0, Math.PI, false); // Draw only the front half circle
+            ctx.strokeStyle = hoop.type === 'red' ? '#ff0000' : BASKETBALL_ORANGE; // Red or Orange rim
+            ctx.lineWidth = 5;
+            ctx.stroke();
+            ctx.lineWidth = 1; // Reset line width
+
+             // Net (simple lines)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; // White net
+            ctx.beginPath();
+            for(let i = 0; i <= 6; i++) {
+                const angle = (i / 6) * Math.PI; // Spread lines across the semi-circle
+                const startX = rimCenterX - Math.cos(angle) * RIM_RADIUS;
+                const startY = rimY - Math.sin(angle) * RIM_RADIUS; // Rim position
+                 if (startY < rimY) continue; // Only draw lines going down from rim
+                const endX = rimCenterX;
+                const endY = rimY + RIM_RADIUS * 0.8; // Net bottom point
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+            }
+            ctx.stroke();
+
+
+            // Draw lifespan indicator (optional visual cue)
+            const lifeRatio = (Date.now() - hoop.createdAt) / hoop.lifespan;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(hoop.x, hoop.y + HOOP_HEIGHT - 5, HOOP_WIDTH, 5);
+            ctx.fillStyle = hoop.type === 'red' ? 'rgba(255, 0, 0, 0.8)' : 'rgba(245, 166, 35, 0.8)';
+            ctx.fillRect(hoop.x, hoop.y + HOOP_HEIGHT - 5, HOOP_WIDTH * (1 - lifeRatio), 5);
+
+            // Draw Ball Animation if active
+            if (hoop.animation && hoop.animation.active) {
+                drawBallAnimation(hoop.animation);
+            }
+        }
+
+        function drawBallAnimation(anim) {
+             // Simple interpolation for movement
+            const progress = (Date.now() - anim.startTime) / anim.duration;
+            if (progress >= 1) {
+                anim.active = false; // Animation finished
+                return;
+            }
+            // Ease-out effect (starts fast, slows down) - adjust exponent for arc
+            const easedProgress = 1 - Math.pow(1 - progress, 2);
+
+            anim.ballX = anim.startX + (anim.targetX - anim.startX) * easedProgress;
+            anim.ballY = anim.startY + (anim.targetY - anim.startY) * easedProgress;
+
+            // Add a simple arc effect
+            const arcHeight = 50 * Math.sin(progress * Math.PI); // Peak height in middle
+            anim.ballY -= arcHeight;
+
+
+            // Draw the ball
+            ctx.fillStyle = BASKETBALL_ORANGE;
+            ctx.beginPath();
+            ctx.arc(anim.ballX, anim.ballY, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+
+        // --- Hoop Logic ---
+        function spawnHoop() {
+            if (!gameActive) return;
+
+            const { x, y } = getRandomPosition();
+            const type = Math.random() < RED_HOOP_CHANCE ? 'red' : 'regular';
+            const lifespan = type === 'red' ? RED_HOOP_LIFESPAN : REGULAR_HOOP_LIFESPAN;
+
+            hoops.push({
+                x,
+                y,
+                type,
+                createdAt: Date.now(),
+                lifespan,
+                clicked: false,
+                animation: null // Initialize animation state
+            });
+        }
+
+        function updateHoops() {
+            const now = Date.now();
+            // Filter out expired or finished animating hoops
+            hoops = hoops.filter(hoop => {
+                 // Keep if clicked and animation is still active
+                if (hoop.clicked && hoop.animation && hoop.animation.active) {
+                    return true;
+                }
+                 // Keep if not clicked and still within lifespan
+                if (!hoop.clicked && now < hoop.createdAt + hoop.lifespan) {
+                    return true;
+                }
+                // Otherwise, remove the hoop
+                return false;
+            });
+        }
+
+
+        // --- Game Flow ---
+        function startGame() {
+            console.log("Starting game...");
+            score = 0;
+            timeLeft = GAME_DURATION;
+            gameActive = true;
+            hoops = [];
+            scoreDisplay.textContent = `SCORE: ${score}`;
+            timeDisplay.textContent = `TIME: ${timeLeft}`;
+            hideMessage();
+            startBtn.style.display = 'none'; // Hide start button
+            canvas.style.display = 'block'; // Show canvas
+
+            resizeCanvas(); // Ensure canvas is sized correctly and LeBron positioned
+
+            // Start timers
+            gameTimerInterval = setInterval(updateTimer, 1000);
+            hoopSpawnInterval = setInterval(spawnHoop, HOOP_SPAWN_INTERVAL);
+
+            // Start the main game loop
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); // Clear previous loop if any
+            gameLoop();
+            spawnHoop(); // Spawn the first hoop immediately
+        }
+
+        function updateTimer() {
+            if (!gameActive) return;
+            timeLeft--;
+            timeDisplay.textContent = `TIME: ${timeLeft}`;
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        function endGame() {
+            console.log("Ending game...");
+            gameActive = false;
+            clearInterval(gameTimerInterval);
+            clearInterval(hoopSpawnInterval);
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); // Stop the drawing loop
+            animationFrameId = null;
+            showMessage(`Time's Up! Final Score: ${score}`);
+            startBtn.style.display = 'block'; // Show start button again (acts as restart prompt)
+            startBtn.textContent = "Play Again?"; // Change button text
+        }
+
+        function showMessage(text) {
+            messageText.textContent = text;
+            messageBox.style.display = 'flex';
+             messageBox.style.flexDirection = 'column';
+            messageBox.style.alignItems = 'center';
+        }
+
+        function hideMessage() {
+            messageBox.style.display = 'none';
+        }
+
+        // --- Main Game Loop ---
+        function gameLoop() {
+            if (!gameActive) return;
+
+            updateHoops(); // Remove old hoops
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            // Draw background elements (optional court lines)
+             ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+             ctx.lineWidth = 3;
+             ctx.beginPath();
+             ctx.arc(canvasWidth / 2, canvasHeight, canvasWidth * 0.3, Math.PI, 0); // Center arc
+             ctx.stroke();
+             ctx.strokeRect(canvasWidth * 0.3, canvasHeight - canvasHeight * 0.4, canvasWidth * 0.4, canvasHeight*0.4); // Key
+             ctx.beginPath();
+             ctx.arc(canvasWidth/2, canvasHeight - canvasHeight * 0.4, canvasWidth * 0.1, 0, Math.PI * 2); // Inner circle
+             ctx.stroke();
+             ctx.lineWidth = 1;
+
+            // ** Draw LeBron figure (now updated) **
+            drawLeBron();
+
+            // Draw all active hoops (and their animations)
+            hoops.forEach(hoop => {
+                 // Draw hoop if it hasn't been clicked OR if it has an active animation
+                 if (!hoop.clicked || (hoop.animation && hoop.animation.active)) {
+                    drawHoop(hoop);
+                 }
+                 // Note: The ball animation is drawn *inside* drawHoop now
+            });
+
+
+            // Request next frame
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        canvas.addEventListener('click', (event) => {
+            if (!gameActive) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+
+            // Check clicks in reverse order (last spawned hoop first)
+            for (let i = hoops.length - 1; i >= 0; i--) {
+                const hoop = hoops[i];
+                if (!hoop.clicked) {
+                    // Define clickable area (entire hoop graphic)
+                    const hoopEndX = hoop.x + HOOP_WIDTH;
+                    const hoopEndY = hoop.y + HOOP_HEIGHT;
+
+                    if (clickX >= hoop.x && clickX <= hoopEndX && clickY >= hoop.y && clickY <= hoopEndY) {
+                        hoop.clicked = true;
+                        const points = hoop.type === 'red' ? RED_HOOP_POINTS : REGULAR_HOOP_POINTS;
+                        score += points;
+                        scoreDisplay.textContent = `SCORE: ${score}`;
+
+                        // Start animation from LeBron's hand
+                        hoop.animation = {
+                            active: true,
+                            startX: lebronHandX, // Start ball from LeBron's hand X
+                            startY: lebronHandY, // Start ball from LeBron's hand Y
+                            targetX: hoop.x + HOOP_WIDTH / 2, // Target center of the rim opening
+                            targetY: hoop.y + BACKBOARD_HEIGHT + RIM_RADIUS / 2,
+                            startTime: Date.now(),
+                            duration: 500 // Animation duration in ms
+                        };
+
+                        // Hoop is handled, no need to check others for this click
+                        break;
+                    }
+                }
+            }
+        });
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame); // Restart button also calls startGame
+        window.addEventListener('resize', () => {
+             resizeCanvas(); // This now also updates LeBron's position
+             // Optional: redraw immediately after resize if game is active
+             if(gameActive) {
+                 // Clear canvas and redraw elements based on new size
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                // Redraw background, LeBron, and hoops
+                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; // Redraw court lines
+                 ctx.lineWidth = 3;
+                 ctx.beginPath();
+                 ctx.arc(canvasWidth / 2, canvasHeight, canvasWidth * 0.3, Math.PI, 0);
+                 ctx.stroke();
+                 ctx.strokeRect(canvasWidth * 0.3, canvasHeight - canvasHeight * 0.4, canvasWidth * 0.4, canvasHeight*0.4);
+                 ctx.beginPath();
+                 ctx.arc(canvasWidth/2, canvasHeight - canvasHeight * 0.4, canvasWidth * 0.1, 0, Math.PI * 2);
+                 ctx.stroke();
+                 ctx.lineWidth = 1;
+                 drawLeBron(); // Redraw updated LeBron
+                 hoops.forEach(drawHoop);
+             }
+        });
+
+        // --- Initial Setup ---
+         window.onload = () => {
+             resizeCanvas(); // Set initial size and LeBron position
+             canvas.style.display = 'none'; // Hide canvas initially
+             hideMessage();
+         };
+
+    </script>
+
+</body>
+</html>
